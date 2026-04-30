@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  TouchEvent as ReactTouchEvent,
 } from "react";
 import videojs, { VideoJsPlayer, VideoJsPlayerOptions } from "video.js";
 import useScript from "src/hooks/useScript";
@@ -266,6 +267,12 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
 
     const [fullscreen, setFullscreen] = useState(false);
     const [showScrubber, setShowScrubber] = useState(false);
+
+    // Swipe gesture state
+    const [swipeIndicator, setSwipeIndicator] = useState<"next" | "prev" | null>(null);
+    const touchStartY = useRef(0);
+    const touchStartX = useRef(0);
+    const swipeThreshold = 80; // minimum vertical distance in px for a swipe
 
     const started = useRef(false);
     const auto = useRef(false);
@@ -973,6 +980,48 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       }
     }
 
+    // Swipe gesture handlers for mobile up/down to switch scenes
+    function onTouchStart(e: ReactTouchEvent<HTMLDivElement>) {
+      if (e.touches.length !== 1) return;
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    }
+
+    function onTouchEnd(e: ReactTouchEvent<HTMLDivElement>) {
+      if (e.changedTouches.length !== 1) return;
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+
+      // Only trigger if vertical swipe is dominant over horizontal
+      if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > swipeThreshold) {
+        if (deltaY < 0) {
+          // Swipe up → next scene
+          onNext();
+          setSwipeIndicator(null);
+        } else {
+          // Swipe down → previous scene
+          onPrevious();
+          setSwipeIndicator(null);
+        }
+      }
+    }
+
+    function onTouchMove(e: ReactTouchEvent<HTMLDivElement>) {
+      if (e.touches.length !== 1) {
+        setSwipeIndicator(null);
+        return;
+      }
+      const deltaX = e.touches[0].clientX - touchStartX.current;
+      const deltaY = e.touches[0].clientY - touchStartY.current;
+
+      // Show indicator only when vertical swipe is dominant
+      if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 30) {
+        setSwipeIndicator(deltaY < 0 ? "next" : "prev");
+      } else {
+        setSwipeIndicator(null);
+      }
+    }
+
     const isPortrait =
       file && file.height && file.width && file.height > file.width;
 
@@ -983,8 +1032,21 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
           "no-file": !file,
         })}
         onKeyDownCapture={onKeyDown}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onTouchMove={onTouchMove}
       >
         <div className="video-wrapper" ref={videoRef} />
+        {swipeIndicator && (
+          <div className={`swipe-indicator swipe-${swipeIndicator}`}>
+            <span className="swipe-icon">
+              {swipeIndicator === "next" ? "▲" : "▼"}
+            </span>
+            <span className="swipe-text">
+              {swipeIndicator === "next" ? "Next" : "Previous"}
+            </span>
+          </div>
+        )}
         {scene.interactive &&
           (interactiveState !== ConnectionState.Ready ||
             getPlayer()?.paused()) && <SceneInteractiveStatus />}

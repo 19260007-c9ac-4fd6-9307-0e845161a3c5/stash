@@ -7,6 +7,8 @@ import {
   useContainerDimensions,
 } from "../Shared/GridCard/GridCard";
 import { PatchComponent } from "src/patch";
+import cx from "classnames";
+import ScreenUtils from "src/utils/screen";
 
 interface ISceneCardGrid {
   scenes: GQL.SlimSceneDataFragment[];
@@ -26,12 +28,19 @@ export const SceneCardGrid: React.FC<ISceneCardGrid> = PatchComponent(
 
     const cardWidth = useCardWidth(containerWidth, zoomIndex, zoomWidths);
 
+    const isMobile = ScreenUtils.isMobile();
+
     return (
-      <div className="row justify-content-center" ref={componentRef}>
+      <div
+        className={cx("row justify-content-center", {
+          "scene-card-grid-mobile": isMobile,
+        })}
+        ref={componentRef}
+      >
         {scenes.map((scene, index) => (
           <SceneCard
             key={scene.id}
-            width={cardWidth}
+            width={isMobile ? undefined : cardWidth}
             scene={scene}
             queue={queue}
             index={index}

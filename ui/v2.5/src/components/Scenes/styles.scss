@@ -997,6 +997,125 @@ input[type="range"].blue-slider {
   }
 }
 
+// TikTok-style mobile card grid
+.scene-card-grid-mobile {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0;
+
+  .scene-card.grid-card {
+    border-radius: 0;
+    margin: 0;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 0;
+    position: relative;
+    width: 100%;
+
+    .thumbnail-section {
+      position: relative;
+
+      // make preview taller on mobile — roughly 60% of viewport height
+      .scene-card-preview {
+        aspect-ratio: 16/10;
+        max-height: 60vh;
+      }
+    }
+
+    .card-section {
+      // overlay title/details on bottom of preview image
+      background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%);
+      bottom: 0;
+      left: 0;
+      margin: 0;
+      padding: 2rem 1rem 0.75rem 1rem;
+      position: absolute;
+      right: 0;
+      z-index: 5;
+
+      a {
+        color: #fff;
+      }
+
+      .card-section-title {
+        color: #fff;
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      }
+    }
+
+    .scene-card__details {
+      color: rgba(255,255,255,0.85);
+      font-size: 0.85rem;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+
+      .scene-card__date {
+        font-weight: 600;
+      }
+
+      .scene-card__description {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+    }
+
+    .scene-specs-overlay {
+      font-size: 0.8rem;
+      z-index: 6;
+    }
+
+    .card-popovers {
+      bottom: 0.5rem;
+      left: 0.5rem;
+      margin: 0;
+      position: absolute;
+      z-index: 6;
+
+      .btn {
+        background: rgba(0,0,0,0.4);
+        color: #fff;
+        font-size: 0.8rem;
+        padding: 4px 8px;
+
+        .fa-icon {
+          margin-right: 4px;
+        }
+      }
+    }
+
+    .studio-overlay {
+      top: 0.5rem;
+      z-index: 6;
+    }
+
+    .rating-banner {
+      z-index: 6;
+    }
+
+    // hide card controls (checkbox/drag handle) on mobile
+    .card-controls {
+      display: none;
+    }
+
+    // hide interactive heatmap on mobile cards
+    .interactive-heatmap {
+      display: none;
+    }
+
+    // ensure progress bar stays visible above the overlay
+    .progress-bar {
+      z-index: 7;
+    }
+  }
+}
+
 // hide drop down menu items for play and create new
 // when the buttons are visible
 @include media-breakpoint-up(sm) {

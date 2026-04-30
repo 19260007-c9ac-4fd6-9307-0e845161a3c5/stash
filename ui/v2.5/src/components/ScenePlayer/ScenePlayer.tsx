@@ -237,6 +237,7 @@ interface IScenePlayerProps {
   onNext: () => void;
   onPrevious: () => void;
   onToggleInfo?: () => void;
+  onRate?: () => void;
   nextSceneId?: string;
   prevSceneId?: string;
 }
@@ -254,6 +255,7 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     onNext,
     onPrevious,
     onToggleInfo,
+    onRate,
     nextSceneId,
     prevSceneId,
   }) => {
@@ -280,6 +282,7 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
 
     const [fullscreen, setFullscreen] = useState(false);
     const [showScrubber, setShowScrubber] = useState(false);
+    const [paused, setPaused] = useState(true);
 
     // Swipe gesture state
     const [swipeIndicator, setSwipeIndicator] = useState<"next" | "prev" | null>(null);
@@ -594,16 +597,23 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         }
       }
 
+      function onPause() { setPaused(true); }
+      function onPlay() { setPaused(false); }
+
       player.on("canplay", canplay);
       player.on("playing", playing);
       player.on("loadstart", loadstart);
       player.on("fullscreenchange", fullscreenchange);
+      player.on("pause", onPause);
+      player.on("play", onPlay);
 
       return () => {
         player.off("canplay", canplay);
         player.off("playing", playing);
         player.off("loadstart", loadstart);
         player.off("fullscreenchange", fullscreenchange);
+        player.off("pause", onPause);
+        player.off("play", onPlay);
       };
     }, [getPlayer]);
 
@@ -1114,71 +1124,66 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     }
 
     function onTouchEnd(e: ReactTouchEvent<HTMLDivElement>) {
-      // Clear long-press timer
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current);
         longPressTimer.current = undefined;
       }
 
-      // Restore playback rate if was long-pressing
       if (isLongPressActive.current) {
         const player = getPlayer();
-        if (player) {
-          player.playbackRate(originalRate.current);
-        }
+        if (player) player.playbackRate(originalRate.current);
         isLongPressActive.current = false;
         setIsLongPressing(false);
         return;
       }
 
-      if (touchMoved.current) {
-        // Process horizontal seek first
-        if (isSeeking.current && e.changedTouches.length === 1) {
-          const player = getPlayer();
-          if (player) {
-            const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-            // 100px = 10 seconds of seeking
-            const seekSeconds = (deltaX / 100) * 10;
-            const newTime = Math.max(0, Math.min(
-              seekStartTime.current + seekSeconds,
-              player.duration() || 0
-            ));
-            player.currentTime(newTime);
-            // Resume playing if was playing before seek
-            if (wasPlayingBeforeSeek.current) {
-              player.play();
-            }
-          }
-          setSeekPreview(null);
-          isSeeking.current = false;
-          return;
-        }
+      if (e.changedTouches.length !== 1) return;
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
 
-        // Process vertical swipe
-        if (e.changedTouches.length !== 1) return;
-        const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-        const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+      console.log("[Stash] touchend dX:", deltaX.toFixed(0), "dY:", deltaY.toFixed(0), "seek:", isSeeking.current);
 
-        if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > swipeThreshold) {
-          if (deltaY < 0) {
-            onNext();
-          } else {
-            onPrevious();
-          }
-          setSwipeIndicator(null);
+      // Horizontal seek
+      if (isSeeking.current && absX > absY && absX > 25) {
+        console.log("[Stash] -> H SEEK");
+        const player = getPlayer();
+        if (player) {
+          const seekSeconds = (deltaX / 100) * 10;
+          const newTime = Math.max(0, Math.min(seekStartTime.current + seekSeconds, player.duration() || 0));
+          player.currentTime(newTime);
+          if (wasPlayingBeforeSeek.current) player.play();
         }
+        setSeekPreview(null);
+        isSeeking.current = false;
         return;
       }
 
-      // Double-tap detection (no movement = tap)
-      // Single tap is handled by video.js natively — we only intercept double-tap
-      const now = Date.now();
-      const timeSinceLastTap = now - lastTapTime.current;
+      // Vertical swipe
+      if (absY > absX && absY > swipeThreshold) {
+        console.log("[Stash] -> V SWIPE");
+        if (deltaY < 0) onNext();
+        else onPrevious();
+        setSwipeIndicator(null);
+        isSeeking.current = false;
+        return;
+      }
 
-      if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
-        // Double tap detected - toggle info overlay
-        setShowInfoOverlay((prev) => !prev);
-        onToggleInfo?.();
+      // Tap zone — check for double-tap
+      isSeeking.current = false;
+      setSwipeIndicator(null);
+      const now = Date.now();
+      const gap = now - lastTapTime.current;
+      console.log("[Stash] tap, gap:", gap);
+
+      if (gap < 350 && gap > 0) {
+        console.log("[Stash] ★ DOUBLE-TAP ★");
+        const newRating = scene.rating100 === 60 ? null : 60;
+        onRate?.();
+        setRatingToast(newRating === 60 ? "★★★" : "☆");
+        if (ratingToastTimer.current) clearTimeout(ratingToastTimer.current);
+        ratingToastTimer.current = setTimeout(() => setRatingToast(null), 1000);
         lastTapTime.current = 0;
       } else {
         lastTapTime.current = now;
@@ -1295,6 +1300,18 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         {isMobile && !showInfoOverlay && (
           <div className="tap-hint">
             <span>双击显示详情</span>
+          </div>
+        )}
+        {paused && (
+          <div
+            className="rate-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const newRating = scene.rating100 === 60 ? null : 60;
+              onRate?.();
+            }}
+          >
+            ⭐ {scene.rating100 === 60 ? "取消3分" : "打3分"}
           </div>
         )}
         {scene.interactive &&

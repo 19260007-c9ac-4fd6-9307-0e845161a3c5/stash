@@ -757,6 +757,7 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
 }) => {
   const { id } = match.params;
   const { configuration } = useConfigurationContext();
+  const [updateScene] = useSceneUpdate();
   const { data, loading, error } = useFindScene(id);
 
   const [scene, setScene] = useState<GQL.SceneDataFragment>();
@@ -1044,6 +1045,17 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
           onNext={() => queueNext(true)}
           onPrevious={() => queuePrevious(true)}
           onToggleInfo={() => setCollapsed((c) => !c)}
+          onRate={() => {
+            const newRating = scene?.rating100 === 60 ? null : 60;
+            updateScene({
+              variables: {
+                input: {
+                  id: id,
+                  rating100: newRating,
+                },
+              },
+            });
+          }}
           nextSceneId={
             currentQueueIndex >= 0 && currentQueueIndex < queueScenes.length - 1
               ? queueScenes[currentQueueIndex + 1].id

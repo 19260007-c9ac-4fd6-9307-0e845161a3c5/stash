@@ -229,6 +229,7 @@ interface IScenePlayerProps {
   onComplete: () => void;
   onNext: () => void;
   onPrevious: () => void;
+  onToggleInfo?: () => void;
 }
 
 export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
@@ -243,6 +244,7 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     onComplete,
     onNext,
     onPrevious,
+    onToggleInfo,
   }) => {
     const { configuration } = useConfigurationContext();
     const interfaceConfig = configuration?.interface;
@@ -273,6 +275,20 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     const touchStartY = useRef(0);
     const touchStartX = useRef(0);
     const swipeThreshold = 80; // minimum vertical distance in px for a swipe
+
+    // Long-press fast-forward state
+    const [isLongPressing, setIsLongPressing] = useState(false);
+    const longPressTimer = useRef<ReturnType<typeof setTimeout>>();
+    const originalRate = useRef(1);
+    const isLongPressActive = useRef(false);
+    const touchMoved = useRef(false);
+
+    // Double-tap to toggle info overlay
+    const [showInfoOverlay, setShowInfoOverlay] = useState(true);
+    const lastTapTime = useRef(0);
+    const tapTimer = useRef<ReturnType<typeof setTimeout>>();
+
+    const isMobile = ScreenUtils.isMobile();
 
     const started = useRef(false);
     const auto = useRef(false);
@@ -985,24 +1001,79 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       if (e.touches.length !== 1) return;
       touchStartX.current = e.touches[0].clientX;
       touchStartY.current = e.touches[0].clientY;
+      touchMoved.current = false;
+      isLongPressActive.current = false;
+      setIsLongPressing(false);
+
+      // Long-press: start 500ms timer for fast-forward
+      longPressTimer.current = setTimeout(() => {
+        const player = getPlayer();
+        if (player && !touchMoved.current) {
+          originalRate.current = player.playbackRate();
+          player.playbackRate(2);
+          isLongPressActive.current = true;
+          setIsLongPressing(true);
+        }
+      }, 500);
     }
 
     function onTouchEnd(e: ReactTouchEvent<HTMLDivElement>) {
-      if (e.changedTouches.length !== 1) return;
-      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-      const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+      // Clear long-press timer
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = undefined;
+      }
 
-      // Only trigger if vertical swipe is dominant over horizontal
-      if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > swipeThreshold) {
-        if (deltaY < 0) {
-          // Swipe up → next scene
-          onNext();
-          setSwipeIndicator(null);
-        } else {
-          // Swipe down → previous scene
-          onPrevious();
+      // Restore playback rate if was long-pressing
+      if (isLongPressActive.current) {
+        const player = getPlayer();
+        if (player) {
+          player.playbackRate(originalRate.current);
+        }
+        isLongPressActive.current = false;
+        setIsLongPressing(false);
+        return; // Don't process swipe or tap after long press
+      }
+
+      if (touchMoved.current) {
+        // Process swipe
+        if (e.changedTouches.length !== 1) return;
+        const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+        const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+
+        if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > swipeThreshold) {
+          if (deltaY < 0) {
+            onNext();
+          } else {
+            onPrevious();
+          }
           setSwipeIndicator(null);
         }
+        return;
+      }
+
+      // Double-tap detection (no movement = tap)
+      const now = Date.now();
+      const timeSinceLastTap = now - lastTapTime.current;
+
+      if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+        // Double tap detected - toggle info overlay
+        if (tapTimer.current) clearTimeout(tapTimer.current);
+        setShowInfoOverlay((prev) => !prev);
+        onToggleInfo?.();
+        lastTapTime.current = 0;
+      } else {
+        // Single tap - play/pause after short delay
+        lastTapTime.current = now;
+        if (tapTimer.current) clearTimeout(tapTimer.current);
+        tapTimer.current = setTimeout(() => {
+          const player = getPlayer();
+          if (player) {
+            if (player.paused()) player.play();
+            else player.pause();
+          }
+          lastTapTime.current = 0;
+        }, 300);
       }
     }
 
@@ -1014,7 +1085,16 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       const deltaX = e.touches[0].clientX - touchStartX.current;
       const deltaY = e.touches[0].clientY - touchStartY.current;
 
-      // Show indicator only when vertical swipe is dominant
+      // If moved more than 10px, cancel long-press
+      if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+        touchMoved.current = true;
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = undefined;
+        }
+      }
+
+      // Show swipe indicator only when vertical swipe is dominant
       if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 30) {
         setSwipeIndicator(deltaY < 0 ? "next" : "prev");
       } else {
@@ -1030,6 +1110,9 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         className={cx("VideoPlayer", {
           portrait: isPortrait,
           "no-file": !file,
+          "mobile-fullscreen": isMobile,
+          "info-hidden": isMobile && !showInfoOverlay,
+          "long-pressing": isLongPressing,
         })}
         onKeyDownCapture={onKeyDown}
         onTouchStart={onTouchStart}
@@ -1037,6 +1120,9 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         onTouchMove={onTouchMove}
       >
         <div className="video-wrapper" ref={videoRef} />
+        {isLongPressing && (
+          <div className="speed-indicator">2x</div>
+        )}
         {swipeIndicator && (
           <div className={`swipe-indicator swipe-${swipeIndicator}`}>
             <span className="swipe-icon">
@@ -1047,10 +1133,15 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
             </span>
           </div>
         )}
+        {isMobile && !showInfoOverlay && (
+          <div className="tap-hint">
+            <span>双击显示详情</span>
+          </div>
+        )}
         {scene.interactive &&
           (interactiveState !== ConnectionState.Ready ||
             getPlayer()?.paused()) && <SceneInteractiveStatus />}
-        {file && showScrubber && (
+        {file && showScrubber && showInfoOverlay && (
           <ScenePlayerScrubber
             file={file}
             scene={scene}

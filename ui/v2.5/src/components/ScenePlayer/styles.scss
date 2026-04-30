@@ -61,6 +61,72 @@ $sceneTabWidth: 450px;
   top: 70%;
 }
 
+// Mobile fullscreen video mode
+.VideoPlayer.mobile-fullscreen {
+  height: 100dvh;
+  left: 0;
+  max-height: none;
+  padding: 0;
+  position: fixed;
+  top: 0;
+  width: 100vw;
+  z-index: 1000;
+
+  .video-wrapper {
+    height: 100%;
+  }
+
+  // Hide the scrubber when info is hidden
+  &.info-hidden .scrubber-wrapper {
+    display: none;
+  }
+}
+
+// Speed indicator for long-press fast-forward
+.speed-indicator {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  display: flex;
+  font-size: 1.5rem;
+  font-weight: 800;
+  justify-content: center;
+  left: 1rem;
+  padding: 6px 14px;
+  pointer-events: none;
+  position: absolute;
+  top: 1rem;
+  z-index: 10;
+}
+
+// Tap hint for double-tap
+.tap-hint {
+  bottom: 6rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  transform: translateX(-50%);
+  z-index: 10;
+}
+
+// Long-pressing visual feedback - dim the video slightly
+.VideoPlayer.long-pressing .video-wrapper::after {
+  background: rgba(0, 0, 0, 0.15);
+  content: "";
+  height: 100%;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  z-index: 2;
+}
+
 .video-wrapper {
   height: 56.25vw;
   overflow: hidden;
@@ -670,11 +736,20 @@ $sceneTabWidth: 450px;
 @media (max-width: 1199px) {
   .scene-tabs {
     padding-right: 15px;
+
+    &.collapsed {
+      display: none;
+    }
   }
 
   .scene-player-container {
     padding-left: 0;
     padding-right: 0;
+
+    &.expanded {
+      padding-left: 0;
+      padding-right: 0;
+    }
   }
 
   .scrubber-wrapper {

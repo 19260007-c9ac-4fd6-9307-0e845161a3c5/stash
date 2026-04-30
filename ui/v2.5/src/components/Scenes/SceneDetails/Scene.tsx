@@ -57,6 +57,7 @@ import { SceneMergeModal } from "../SceneMergeDialog";
 import { goBackOrReplace } from "src/utils/history";
 import { FormattedDate } from "src/components/Shared/Date";
 import { StudioLogo } from "src/components/Shared/StudioLogo";
+import ScreenUtils from "src/utils/screen";
 
 const SubmitStashBoxDraft = lazyComponent(
   () => import("src/components/Dialogs/SubmitDraft")
@@ -787,7 +788,7 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
 
   const [queueScenes, setQueueScenes] = useState<QueuedScene[]>([]);
 
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(ScreenUtils.isMobile());
   const [continuePlaylist, setContinuePlaylist] = useState(queryContinue);
   const [hideScrubber, setHideScrubber] = useState(
     !(configuration?.interface.showScrubber ?? true)
@@ -1042,6 +1043,7 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
           onComplete={onComplete}
           onNext={() => queueNext(true)}
           onPrevious={() => queuePrevious(true)}
+          onToggleInfo={() => setCollapsed((c) => !c)}
         />
       </div>
     </div>

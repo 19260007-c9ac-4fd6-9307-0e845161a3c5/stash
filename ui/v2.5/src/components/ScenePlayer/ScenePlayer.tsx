@@ -286,7 +286,6 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     // Double-tap to toggle info overlay
     const [showInfoOverlay, setShowInfoOverlay] = useState(true);
     const lastTapTime = useRef(0);
-    const tapTimer = useRef<ReturnType<typeof setTimeout>>();
 
     const isMobile = ScreenUtils.isMobile();
 
@@ -1032,7 +1031,7 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         }
         isLongPressActive.current = false;
         setIsLongPressing(false);
-        return; // Don't process swipe or tap after long press
+        return;
       }
 
       if (touchMoved.current) {
@@ -1053,27 +1052,17 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       }
 
       // Double-tap detection (no movement = tap)
+      // Single tap is handled by video.js natively — we only intercept double-tap
       const now = Date.now();
       const timeSinceLastTap = now - lastTapTime.current;
 
       if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
         // Double tap detected - toggle info overlay
-        if (tapTimer.current) clearTimeout(tapTimer.current);
         setShowInfoOverlay((prev) => !prev);
         onToggleInfo?.();
         lastTapTime.current = 0;
       } else {
-        // Single tap - play/pause after short delay
         lastTapTime.current = now;
-        if (tapTimer.current) clearTimeout(tapTimer.current);
-        tapTimer.current = setTimeout(() => {
-          const player = getPlayer();
-          if (player) {
-            if (player.paused()) player.play();
-            else player.pause();
-          }
-          lastTapTime.current = 0;
-        }, 300);
       }
     }
 

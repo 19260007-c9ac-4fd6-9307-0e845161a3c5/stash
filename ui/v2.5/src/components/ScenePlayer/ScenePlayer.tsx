@@ -219,6 +219,13 @@ function getMarkerTitle(marker: MarkerFragment) {
   return ret;
 }
 
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 interface IScenePlayerProps {
   scene: GQL.SceneDataFragment;
   hideScrubberOverride: boolean;
@@ -286,6 +293,16 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     // Double-tap to toggle info overlay
     const [showInfoOverlay, setShowInfoOverlay] = useState(true);
     const lastTapTime = useRef(0);
+
+    // Horizontal drag seek state
+    const [seekPreview, setSeekPreview] = useState<{
+      time: number;
+      duration: number;
+      direction: "forward" | "backward";
+    } | null>(null);
+    const seekStartTime = useRef(0);
+    const wasPlayingBeforeSeek = useRef(false);
+    const isSeeking = useRef(false);
 
     const isMobile = ScreenUtils.isMobile();
 
@@ -466,6 +483,27 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       // player re-initialization when toggling autostart (which would interrupt playback)
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [uiConfig?.showAbLoopControls, uiConfig?.enableChromecast]);
+
+    // Prevent browser pull-to-refresh on mobile when swiping on video
+    useEffect(() => {
+      const el = videoRef.current;
+      if (!el || !isMobile) return;
+
+      function preventPullRefresh(e: TouchEvent) {
+        if (e.touches.length !== 1) return;
+        // Only block when vertical swipe is dominant (we're in swipe mode)
+        const deltaY = e.touches[0].clientY - touchStartY.current;
+        const deltaX = e.touches[0].clientX - touchStartX.current;
+        if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) {
+          e.preventDefault();
+        }
+      }
+
+      el.addEventListener("touchmove", preventPullRefresh, { passive: false });
+      return () => {
+        el.removeEventListener("touchmove", preventPullRefresh);
+      };
+    }, [isMobile]);
 
     useEffect(() => {
       const player = getPlayer();
@@ -739,6 +777,12 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         if (startPosition) {
           player.currentTime(startPosition);
         }
+
+        // Force auto-play when requested (swipe, next button etc.)
+        if (auto.current) {
+          player.play();
+          auto.current = false;
+        }
       });
 
       started.current = false;
@@ -1002,7 +1046,16 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       touchStartY.current = e.touches[0].clientY;
       touchMoved.current = false;
       isLongPressActive.current = false;
+      isSeeking.current = false;
       setIsLongPressing(false);
+      setSeekPreview(null);
+
+      // Store the current time and play state for potential seek
+      const player = getPlayer();
+      if (player) {
+        seekStartTime.current = player.currentTime();
+        wasPlayingBeforeSeek.current = !player.paused();
+      }
 
       // Long-press: start 500ms timer for fast-forward
       longPressTimer.current = setTimeout(() => {
@@ -1035,7 +1088,29 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       }
 
       if (touchMoved.current) {
-        // Process swipe
+        // Process horizontal seek first
+        if (isSeeking.current && e.changedTouches.length === 1) {
+          const player = getPlayer();
+          if (player) {
+            const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+            // 100px = 10 seconds of seeking
+            const seekSeconds = (deltaX / 100) * 10;
+            const newTime = Math.max(0, Math.min(
+              seekStartTime.current + seekSeconds,
+              player.duration() || 0
+            ));
+            player.currentTime(newTime);
+            // Resume playing if was playing before seek
+            if (wasPlayingBeforeSeek.current) {
+              player.play();
+            }
+          }
+          setSeekPreview(null);
+          isSeeking.current = false;
+          return;
+        }
+
+        // Process vertical swipe
         if (e.changedTouches.length !== 1) return;
         const deltaX = e.changedTouches[0].clientX - touchStartX.current;
         const deltaY = e.changedTouches[0].clientY - touchStartY.current;
@@ -1069,6 +1144,7 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     function onTouchMove(e: ReactTouchEvent<HTMLDivElement>) {
       if (e.touches.length !== 1) {
         setSwipeIndicator(null);
+        setSeekPreview(null);
         return;
       }
       const deltaX = e.touches[0].clientX - touchStartX.current;
@@ -1083,11 +1159,40 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         }
       }
 
-      // Show swipe indicator only when vertical swipe is dominant
-      if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 30) {
+      // Determine dominant direction
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+
+      if (absY > absX && absY > 30) {
+        // Vertical swipe dominant — show next/prev indicator
+        setSeekPreview(null);
+        isSeeking.current = false;
         setSwipeIndicator(deltaY < 0 ? "next" : "prev");
+      } else if (absX > absY && absX > 15) {
+        // Horizontal swipe dominant — show seek preview
+        setSwipeIndicator(null);
+        isSeeking.current = true;
+
+        const player = getPlayer();
+        if (player) {
+          const duration = player.duration() || 0;
+          if (duration > 0) {
+            // 100px = 10 seconds of seeking
+            const seekSeconds = (deltaX / 100) * 10;
+            const newTime = Math.max(0, Math.min(
+              seekStartTime.current + seekSeconds,
+              duration
+            ));
+            setSeekPreview({
+              time: newTime,
+              duration,
+              direction: deltaX > 0 ? "forward" : "backward",
+            });
+          }
+        }
       } else {
         setSwipeIndicator(null);
+        setSeekPreview(null);
       }
     }
 
@@ -1111,6 +1216,27 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         <div className="video-wrapper" ref={videoRef} />
         {isLongPressing && (
           <div className="speed-indicator">2x</div>
+        )}
+        {seekPreview && (
+          <div className="seek-preview">
+            <div className="seek-time">
+              {formatTime(seekPreview.time)} / {formatTime(seekPreview.duration)}
+            </div>
+            <div className="seek-bar">
+              <div
+                className="seek-bar-fill"
+                style={{
+                  width: `${(seekPreview.time / seekPreview.duration) * 100}%`,
+                }}
+              />
+            </div>
+            <div className="seek-direction">
+              {seekPreview.direction === "forward" ? "⟫" : "⟪"}
+              {Math.abs(
+                Math.round(seekPreview.time - seekStartTime.current)
+              )}s
+            </div>
+          </div>
         )}
         {swipeIndicator && (
           <div className={`swipe-indicator swipe-${swipeIndicator}`}>

@@ -1044,6 +1044,16 @@ const SceneLoader: React.FC<RouteComponentProps<ISceneParams>> = ({
           onNext={() => queueNext(true)}
           onPrevious={() => queuePrevious(true)}
           onToggleInfo={() => setCollapsed((c) => !c)}
+          nextSceneId={
+            currentQueueIndex >= 0 && currentQueueIndex < queueScenes.length - 1
+              ? queueScenes[currentQueueIndex + 1].id
+              : undefined
+          }
+          prevSceneId={
+            currentQueueIndex > 0
+              ? queueScenes[currentQueueIndex - 1].id
+              : undefined
+          }
         />
       </div>
     </div>

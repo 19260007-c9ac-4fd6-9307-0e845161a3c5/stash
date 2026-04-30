@@ -237,6 +237,8 @@ interface IScenePlayerProps {
   onNext: () => void;
   onPrevious: () => void;
   onToggleInfo?: () => void;
+  nextSceneId?: string;
+  prevSceneId?: string;
 }
 
 export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
@@ -252,6 +254,8 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     onNext,
     onPrevious,
     onToggleInfo,
+    nextSceneId,
+    prevSceneId,
   }) => {
     const { configuration } = useConfigurationContext();
     const interfaceConfig = configuration?.interface;
@@ -997,6 +1001,36 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
           scene.paths.screenshot || ""
         );
     }, [getPlayer, scene]);
+
+    // Preload adjacent scene video streams for fast swipe
+    useEffect(() => {
+      const player = getPlayer();
+      if (!player || !isMobile) return;
+
+      let preloaded = false;
+
+      function doPreload() {
+        if (preloaded) return;
+        preloaded = true;
+
+        const ids = [nextSceneId, prevSceneId].filter(Boolean);
+        for (const id of ids) {
+          // Use fetch to warm the browser cache for the stream URL
+          // We use a low-priority HEAD-like request just to establish the connection
+          fetch(`/scene/${id}/stream.mp4?resolution=LOW`, {
+            mode: "same-origin",
+            credentials: "include",
+          }).catch(() => {});
+        }
+      }
+
+      // Preload after playback starts
+      player.on("playing", doPreload);
+
+      return () => {
+        player.off("playing", doPreload);
+      };
+    }, [getPlayer, nextSceneId, prevSceneId, isMobile]);
 
     const pausedBeforeScrubber = useRef(true);
 

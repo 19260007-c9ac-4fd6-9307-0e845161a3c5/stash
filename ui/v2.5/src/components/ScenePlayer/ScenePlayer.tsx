@@ -581,7 +581,17 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       }
 
       function fullscreenchange(this: VideoJsPlayer) {
-        setFullscreen(this.isFullscreen());
+        const isFS = this.isFullscreen();
+        setFullscreen(isFS);
+
+        // Lock/unlock orientation to portrait on mobile
+        if (isMobile && screen.orientation?.lock) {
+          if (isFS) {
+            screen.orientation.lock("portrait").catch(() => {});
+          } else {
+            screen.orientation.unlock();
+          }
+        }
       }
 
       player.on("canplay", canplay);

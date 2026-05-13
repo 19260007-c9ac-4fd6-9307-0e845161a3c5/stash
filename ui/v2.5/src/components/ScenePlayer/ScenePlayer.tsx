@@ -301,6 +301,10 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     const [showInfoOverlay, setShowInfoOverlay] = useState(true);
     const lastTapTime = useRef(0);
 
+    // Rating feedback
+    const [ratingToast, setRatingToast] = useState<string | null>(null);
+    const ratingToastTimer = useRef<ReturnType<typeof setTimeout>>();
+
     // Horizontal drag seek state
     const [seekPreview, setSeekPreview] = useState<{
       time: number;
@@ -1143,11 +1147,8 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
 
-      console.log("[Stash] touchend dX:", deltaX.toFixed(0), "dY:", deltaY.toFixed(0), "seek:", isSeeking.current);
-
       // Horizontal seek
       if (isSeeking.current && absX > absY && absX > 25) {
-        console.log("[Stash] -> H SEEK");
         const player = getPlayer();
         if (player) {
           const seekSeconds = (deltaX / 100) * 10;
@@ -1162,7 +1163,6 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
 
       // Vertical swipe
       if (absY > absX && absY > swipeThreshold) {
-        console.log("[Stash] -> V SWIPE");
         if (deltaY < 0) onNext();
         else onPrevious();
         setSwipeIndicator(null);
@@ -1175,10 +1175,8 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       setSwipeIndicator(null);
       const now = Date.now();
       const gap = now - lastTapTime.current;
-      console.log("[Stash] tap, gap:", gap);
 
       if (gap < 350 && gap > 0) {
-        console.log("[Stash] ★ DOUBLE-TAP ★");
         const newRating = scene.rating100 === 60 ? null : 60;
         onRate?.();
         setRatingToast(newRating === 60 ? "★★★" : "☆");
@@ -1301,6 +1299,9 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
           <div className="tap-hint">
             <span>双击显示详情</span>
           </div>
+        )}
+        {ratingToast && (
+          <div className="rating-toast">{ratingToast}</div>
         )}
         {paused && (
           <div
